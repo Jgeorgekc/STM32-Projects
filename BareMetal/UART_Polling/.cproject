@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="com.st.stm32cube.ide.cmake.cmakeTarget">
-				<src>/home/lenovo/STM32CubeIDE/workspace_2.1.2/uart_polling</src>
+				<src>/home/lenovo/STM32CubeIDE/workspace_2.1.2/STM32-Projects/BareMetal/UART_Polling</src>
 				<build>Debug</build>
 				<generator>Ninja</generator>
 				<cmake_build_type>Debug</cmake_build_type>
