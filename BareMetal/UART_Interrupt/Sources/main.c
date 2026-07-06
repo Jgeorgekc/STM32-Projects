@@ -22,6 +22,16 @@
 
 #define NVIC_ISER1 (*(volatile uint32_t *)0xE000E104)
 
+#define RCC_APB2ENR      (*(volatile uint32_t *)0x40023844)
+
+#define SYSCFG_EXTICR1   (*(volatile uint32_t *)0x40013808)
+
+#define EXTI_IMR         (*(volatile uint32_t *)0x40013C00)
+#define EXTI_RTSR        (*(volatile uint32_t *)0x40013C08)
+#define EXTI_PR          (*(volatile uint32_t *)0x40013C14)
+
+#define NVIC_ISER0       (*(volatile uint32_t *)0xE000E100)
+
 void UART_SendChar(char ch);
 void UART_SendString(char *str);
 char UART_ReadChar(void);
@@ -84,10 +94,25 @@ int main(void)
     cr3 = USART2_CR3;
     apb1enr = RCC_APB1ENR;
 
+    /* Enable SYSCFG clock */
+    RCC_APB2ENR |= (1<<14);
+
+    /* PA0 -> EXTI0 */
+    SYSCFG_EXTICR1 &= ~(0xF<<0);
+
+    /* Unmask EXTI0 */
+    EXTI_IMR |= (1<<0);
+
+    /* Rising edge */
+    EXTI_RTSR |= (1<<0);
+
+    /* Enable EXTI0 IRQ */
+    NVIC_ISER0 |= (1<<6);
+
 
     while (1)
     {
-        UART_SendChar('A');
+        //UART_SendChar('A');
 
         delay(500000);
     }
@@ -116,7 +141,7 @@ void UART_SendString(char *str)
 }
 void USART2_IRQHandler(void)
 {
-	static int  x = 0;
+
     if (USART2_SR & (1 << 5))
     {
         rx = USART2_DR;
@@ -127,5 +152,15 @@ void USART2_IRQHandler(void)
         {
             x++;
         }
+    }
+}
+
+void EXTI0_IRQHandler(void)
+{
+    if (EXTI_PR & (1<<0))
+    {
+        EXTI_PR |= (1<<0);
+
+        UART_SendString("Button Pressed\r\n");
     }
 }
