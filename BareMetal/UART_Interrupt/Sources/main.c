@@ -32,9 +32,17 @@
 
 #define NVIC_ISER0       (*(volatile uint32_t *)0xE000E100)
 
+#define UART_BUFFER_SIZE 64
+
+volatile char uart_buffer[UART_BUFFER_SIZE];
+
+volatile uint8_t head = 0;
+volatile uint8_t tail = 0;
+
 void UART_SendChar(char ch);
 void UART_SendString(char *str);
 char UART_ReadChar(void);
+char UART_BufferRead(void);
 
 void delay(volatile uint32_t count)
 {
@@ -47,6 +55,8 @@ volatile uint32_t apb1enr;
 
 volatile char rx;
 volatile int x = 0;
+volatile uint32_t uart_sr = 0;
+volatile uint8_t ore_count = 0;
 
 int main(void)
 {
@@ -112,9 +122,11 @@ int main(void)
 
     while (1)
     {
-        //UART_SendChar('A');
+    	char ch;
 
-        delay(500000);
+    	    ch = UART_BufferRead();
+
+    	    UART_SendChar(ch);
     }
 }
 
@@ -141,17 +153,35 @@ void UART_SendString(char *str)
 }
 void USART2_IRQHandler(void)
 {
+	volatile uint32_t rx_count = 0;
+
+    /* Capture status register */
+    uart_sr = USART2_SR;
+
+    /* Check Overrun Error */
+    if (uart_sr & (1 << 3))
+    {
+        ore_count++;
+
+        /* Clear ORE:
+         * Read SR first (already done),
+         * then read DR.
+         */
+        volatile uint32_t dummy = USART2_DR;
+        (void)dummy;
+
+        return;
+    }
+
 
     if (USART2_SR & (1 << 5))
     {
-        rx = USART2_DR;
+    	uart_buffer[head]=USART2_DR;
 
-        UART_SendChar(rx);
+    	head=(head+1)%UART_BUFFER_SIZE;
 
-        if(rx == 'A')
-        {
-            x++;
-        }
+    	rx_count++;
+
     }
 }
 
@@ -163,4 +193,17 @@ void EXTI0_IRQHandler(void)
 
         UART_SendString("Button Pressed\r\n");
     }
+}
+char UART_BufferRead(void)
+{
+    char data;
+
+    /* Buffer empty? */
+    while (head == tail);
+
+    data = uart_buffer[tail];
+
+    tail = (tail + 1) % UART_BUFFER_SIZE;
+
+    return data;
 }
