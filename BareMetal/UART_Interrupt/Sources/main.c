@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 
 /* RCC */
 #define RCC_AHB1ENR   (*(volatile uint32_t *)0x40023830)
@@ -9,6 +10,10 @@
 #define GPIOA_PUPDR   (*(volatile uint32_t *)0x4002000C)
 #define GPIOA_AFRL    (*(volatile uint32_t *)0x40020020)
 
+/* GPIOD */
+#define GPIOD_MODER   (*(volatile uint32_t *)0x40020C00)
+#define GPIOD_ODR     (*(volatile uint32_t *)0x40020C14)
+
 /* USART2 */
 #define USART2_SR     (*(volatile uint32_t *)0x40004400)
 #define USART2_DR     (*(volatile uint32_t *)0x40004404)
@@ -16,6 +21,7 @@
 #define USART2_CR1    (*(volatile uint32_t *)0x4000440C)
 
 #define RCC_APB1RSTR (*(volatile uint32_t *)0x40023820)
+
 
 #define USART2_CR2 (*(volatile uint32_t *)0x40004410)
 #define USART2_CR3 (*(volatile uint32_t *)0x40004414)
@@ -33,6 +39,13 @@
 #define NVIC_ISER0       (*(volatile uint32_t *)0xE000E100)
 
 #define UART_BUFFER_SIZE 64
+
+#define CMD_BUFFER_SIZE 32
+
+char cmd_buffer[CMD_BUFFER_SIZE];
+
+uint8_t cmd_index = 0;
+
 
 volatile char uart_buffer[UART_BUFFER_SIZE];
 
@@ -68,7 +81,9 @@ int main(void)
     RCC_APB1ENR |= (1 << 17);     // Enable USART2 clock
 
     /* Enable Clocks */
-    RCC_AHB1ENR |= (1 << 0);      // GPIOA
+    RCC_AHB1ENR |= (1 << 0);   // GPIOA
+    RCC_AHB1ENR |= (1 << 3);   // GPIOD
+
     RCC_APB1ENR |= (1 << 17);     // USART2
 
     /* PA2 -> USART2_TX */
@@ -104,6 +119,10 @@ int main(void)
     cr3 = USART2_CR3;
     apb1enr = RCC_APB1ENR;
 
+    /* PD12 Output */
+    GPIOD_MODER &= ~(3 << 24);
+    GPIOD_MODER |=  (1 << 24);
+
     /* Enable SYSCFG clock */
     RCC_APB2ENR |= (1<<14);
 
@@ -120,13 +139,72 @@ int main(void)
     NVIC_ISER0 |= (1<<6);
 
 
-    while (1)
+    while(1)
     {
-    	char ch;
+        if(head != tail)
+        {
+            char ch = UART_BufferRead();
 
-    	    ch = UART_BufferRead();
+            UART_SendChar(ch);      // Echo
 
-    	    UART_SendChar(ch);
+            if(ch != '\r' && ch != '\n')
+            {
+                cmd_buffer[cmd_index++] = ch;
+            }
+            else
+            {
+                cmd_buffer[cmd_index] = '\0';
+
+                if(cmd_index == 0)
+                {
+                    continue;
+                }
+
+                if(strcmp(cmd_buffer,"led on") == 0)
+                {
+                    GPIOD_ODR |= (1 << 12);
+
+                    UART_SendString("\r\nLED ON\r\n");
+                }else if(strcmp(cmd_buffer,"led off") == 0)
+                {
+                    GPIOD_ODR &= ~(1 << 12);
+
+                    UART_SendString("\r\nLED OFF\r\n");
+                }/* STATUS */
+                else if(strcmp(cmd_buffer, "status") == 0)
+                {
+                    UART_SendString("\r\n===== SYSTEM STATUS =====\r\n");
+
+                    if(GPIOD_ODR & (1 << 12))
+                        UART_SendString("LED : ON\r\n");
+                    else
+                        UART_SendString("LED : OFF\r\n");
+
+                    UART_SendString("UART : OK\r\n");
+                    UART_SendString("=========================\r\n");
+                }
+
+                /* HELP */
+                else if(strcmp(cmd_buffer, "help") == 0)
+                {
+                    UART_SendString("\r\nAvailable Commands\r\n");
+                    UART_SendString("------------------\r\n");
+                    UART_SendString("help\r\n");
+                    UART_SendString("led on\r\n");
+                    UART_SendString("led off\r\n");
+                    UART_SendString("status\r\n");
+                }
+
+                /* Unknown command */
+                else
+                {
+                    UART_SendString("\r\nUnknown Command\r\n");
+                    UART_SendString("Type 'help'\r\n");
+                }
+
+                cmd_index = 0;
+            }
+        }
     }
 }
 
