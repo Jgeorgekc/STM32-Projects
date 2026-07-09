@@ -51,7 +51,7 @@
 #define DMA1_HISR      (*(volatile uint32_t *)(DMA1_BASE + 0x04))
 
 /* High Interrupt Flag Clear Register */
-#define DMA1_HIFCR     (*(volatile uint32_t *)(DMA1_BASE + 0x0C))
+#define DMA1_HIFCR (*(volatile uint32_t *)(DMA1_BASE + 0x0C))
 
 /* Stream 6 Registers (USART2_TX uses Stream6) */
 #define DMA1_S6CR      (*(volatile uint32_t *)(DMA1_BASE + 0xA0))
@@ -59,3 +59,11 @@
 #define DMA1_S6PAR     (*(volatile uint32_t *)(DMA1_BASE + 0xA8))
 #define DMA1_S6M0AR    (*(volatile uint32_t *)(DMA1_BASE + 0xAC))
 #define DMA1_S6FCR     (*(volatile uint32_t *)(DMA1_BASE + 0xB0))
+
+/* DMA1 Stream6 Flags */
+
+/* HISR */
+#define DMA_TCIF6      (1U << 21)
+
+/* HIFCR */
+#define DMA_CTCIF6     (1U << 21)

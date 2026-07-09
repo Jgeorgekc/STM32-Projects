@@ -1,6 +1,8 @@
+#include <stdio.h>
 #include <stdint.h>
 #include "stm32f407.h"
 #include "uart.h"
+
 
 
 volatile uint32_t cr2;
@@ -79,14 +81,16 @@ int main(void)
     NVIC_ISER0 |= (1<<6);
 
 
+    /*-------------------------------------------------------
+     * Enable DMA1 Stream6 Interrupt
+     *------------------------------------------------------*/
+    NVIC_ISER0 |= (1 << 17);
 
+    UART_DMA_Init();
+    //ore_count = 0;
     while(1)
     {
-        if(dma_sent == 0)
-        {
-            UART_SendString_DMA(msg);
-            dma_sent = 1;
-        }
+
     	while(UART_Available())
         {
 
@@ -107,20 +111,27 @@ int main(void)
                 {
                     continue;
                 }
+                if(UART_DMA_IsBusy())
+                {
+                    return 0;
+                }
 
                 if(strcmp(cmd_buffer,"led on") == 0)
                 {
                     GPIOD_ODR |= (1 << 12);
 
                     //UART_SendString("\r\nLED ON\r\n");
-                    UART_SendString_IT("LED ON\r\n");
+                    //UART_SendString_IT("LED ON\r\n");
+                    UART_SendString_DMA("LED ON\r\n");
                     //UART_SendString_IT("123456789\r\n");
 
                 }else if(strcmp(cmd_buffer,"led off") == 0)
                 {
                     GPIOD_ODR &= ~(1 << 12);
 
-                    UART_SendString_IT("\r\nLED OFF\r\n");
+                    //UART_SendString_IT("\r\nLED OFF\r\n");
+
+                    UART_SendString_DMA("\r\nLED OFF\r\n");
                 }/* STATUS */
                 else if(strcmp(cmd_buffer, "status") == 0)
                 {
@@ -158,11 +169,17 @@ int main(void)
                 	{
                 	    strcat(status_msg,"Overrun Error : DETECTED\r\n");
                 	}
+                	char temp[32];
+
+                	sprintf(temp, "ORE Count     : %d\r\n", UART_GetORECount());
+
+                	strcat(status_msg, temp);
 
                 	strcat(status_msg,
                 	       "===================================\r\n");
 
-                    UART_SendString_IT(status_msg);
+                    //UART_SendString_IT(status_msg);
+                    UART_SendString_DMA(status_msg);
                     //UART_SendString_IT(
                     //    "===================================\r\n");
                 }
@@ -170,12 +187,24 @@ int main(void)
                 /* HELP */
                 else if(strcmp(cmd_buffer, "help") == 0)
                 {
+					#if 0
                 	UART_SendString_IT("\r\nAvailable Commands\r\n");
                 	UART_SendString_IT("------------------\r\n");
                 	UART_SendString_IT("help\r\n");
                 	UART_SendString_IT("led on\r\n");
                 	UART_SendString_IT("led off\r\n");
                 	UART_SendString_IT("status\r\n");
+					#endif
+
+                	char help_msg[] =
+                	"\r\nAvailable Commands\r\n"
+                	"------------------\r\n"
+                	"help\r\n"
+                	"led on\r\n"
+                	"led off\r\n"
+                	"status\r\n";
+
+                	UART_SendString_DMA(help_msg);
                 }
 
                 /* Unknown command */

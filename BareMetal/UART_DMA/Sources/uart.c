@@ -17,6 +17,7 @@ static volatile char rx;
 static volatile int x = 0;
 static volatile uint32_t uart_sr = 0;
 static volatile uint8_t tx_busy = 0;
+volatile uint8_t dma_busy = 0;
 
 
 void delay(volatile uint32_t count)
@@ -151,8 +152,7 @@ uint8_t UART_Available(void)
 {
     return (head != tail);
 }
-
-void UART_SendString_DMA(char *str)
+void UART_DMA_Init(void)
 {
     /* Disable Stream */
 
@@ -168,101 +168,76 @@ void UART_SendString_DMA(char *str)
 
     /* Enable UART DMA */
 
-    /* Enable DMA Stream */
-
     /*-------------------------------------------------------
      * Enable DMA1 Clock
-     *
-     * DMA1 belongs to AHB1 Bus.
-     * Without enabling this clock, DMA registers
-     * cannot be accessed.
      *------------------------------------------------------*/
     RCC_AHB1ENR |= (1 << 21);
 
-    /*-------------------------------------------------------
-     * Disable Stream6 before configuration.
-     * DMA registers can be modified only when EN = 0.
-     *------------------------------------------------------*/
-    DMA1_S6CR &= ~(1 << 0);      // EN = 0
+    /* Disable Stream6 */
+    DMA1_S6CR &= ~(1 << 0);
 
-    /* Wait until hardware clears EN bit */
-    while (DMA1_S6CR & (1 << 0));
+    while(DMA1_S6CR & (1 << 0));
 
     /*-------------------------------------------------------
-     * Select Channel 4
-     *
-     * USART2_TX -> DMA1 Stream6 Channel4
+     * Channel 4
      *------------------------------------------------------*/
-    DMA1_S6CR &= ~(7 << 25);      // Clear CHSEL bits
-    DMA1_S6CR |=  (4 << 25);      // CHSEL = 4
+    DMA1_S6CR &= ~(7 << 25);
+    DMA1_S6CR |=  (4 << 25);
 
     /*-------------------------------------------------------
      * Memory -> Peripheral
-     *
-     * Data will move from RAM to USART2_DR.
      *------------------------------------------------------*/
-    DMA1_S6CR &= ~(3 << 6);       // Clear DIR bits
-    DMA1_S6CR |=  (1 << 6);       // DIR = 01
+    DMA1_S6CR &= ~(3 << 6);
+    DMA1_S6CR |=  (1 << 6);
 
-    /*-------------------------------------------------------
-     * Enable Memory Increment
-     *
-     * Move to next byte after every transfer.
-     *------------------------------------------------------*/
+    /* Memory Increment */
     DMA1_S6CR |= (1 << 10);
 
-    /*-------------------------------------------------------
-     * Disable Peripheral Increment
-     *
-     * USART_DR address is always fixed.
-     *------------------------------------------------------*/
+    /* Peripheral Increment Disable */
     DMA1_S6CR &= ~(1 << 9);
 
-    /*-------------------------------------------------------
-     * Disable Circular Mode
-     *
-     * One-shot transmission.
-     *------------------------------------------------------*/
+    /* Normal Mode */
     DMA1_S6CR &= ~(1 << 8);
 
-    /*-------------------------------------------------------
-     * Medium Priority
-     *------------------------------------------------------*/
+    /* Medium Priority */
     DMA1_S6CR &= ~(3 << 16);
     DMA1_S6CR |=  (1 << 16);
 
-    /*-------------------------------------------------------
-     * Peripheral Address Register
-     *
-     * Destination = USART2 Data Register
-     * DMA writes every byte to USART2_DR.
-     *------------------------------------------------------*/
+    /* Peripheral Address */
     DMA1_S6PAR = (uint32_t)&USART2_DR;
 
-
-
-    /*-------------------------------------------------------
-     * Memory Address Register
-     *
-     * Source = msg buffer
-     * DMA starts reading from this address.
-     *------------------------------------------------------*/
-    DMA1_S6M0AR = (uint32_t)str;
+    /* Enable USART DMA */
+    USART2_CR3 |= (1 << 7);
 
     /*-------------------------------------------------------
-     * Number of Data Register
-     *
-     * Total bytes to transfer.
+     * Enable Transfer Complete Interrupt
      *------------------------------------------------------*/
-    DMA1_S6NDTR = strlen(str);
+    DMA1_S6CR |= (1 << 4);      // TCIE = 1
+}
+uint8_t UART_DMA_IsBusy(void)
+{
+    return dma_busy;
+}
 
-    /*-------------------------------------------------------
-     * Enable USART2 DMA Transmitter
-     *
-     * When TXE occurs, USART2 will generate
-     * DMA requests instead of CPU interrupts.
-     *------------------------------------------------------*/
-    USART2_CR3 |= (1 << 7);      // DMAT = 1
+void UART_SendString_DMA(char *str)
+{
+
+		dma_busy = 1;
+
+	 /* Disable Stream */
+	    DMA1_S6CR &= ~(1 << 0);
+
+	    while(DMA1_S6CR & (1 << 0)){};
+
+	    /* Clear Transfer Complete Flag */
+	    /* Clear previous Transfer Complete Flag */
+	    DMA1_HIFCR = DMA_CTCIF6;
+
+	     /* Source Address */
+	      DMA1_S6M0AR = (uint32_t)str;
+
+	     /* Transfer Length */
+	      DMA1_S6NDTR = strlen(str);
 
     /*-------------------------------------------------------
      * Enable DMA Stream6
@@ -272,4 +247,15 @@ void UART_SendString_DMA(char *str)
      *------------------------------------------------------*/
     DMA1_S6CR |= (1 << 0);      // EN = 1
 }
+void DMA1_Stream6_IRQHandler(void)
+{
+    /* Transfer Complete? */
 
+    if(DMA1_HISR & DMA_TCIF6)
+    {
+        /* Clear TC Flag */
+        DMA1_HIFCR = DMA_TCIF6;
+
+        dma_busy = 0;
+    }
+}

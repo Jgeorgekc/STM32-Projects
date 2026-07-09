@@ -37,6 +37,10 @@ char UART_Read(void);
 
 uint8_t UART_GetORECount(void);
 
+void UART_DMA_Init(void);
+
 void UART_SendString_DMA(char *str);
+
+uint8_t UART_DMA_IsBusy(void);
 
 #endif
