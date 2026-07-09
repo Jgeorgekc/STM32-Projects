@@ -43,4 +43,6 @@ void UART_SendString_DMA(char *str);
 
 uint8_t UART_DMA_IsBusy(void);
 
+void UART_DMA_RX_Init(void);
+
 #endif

@@ -67,3 +67,14 @@
 
 /* HIFCR */
 #define DMA_CTCIF6     (1U << 21)
+
+
+/*-------------------------------------------------------
+ * DMA1 Stream5 Registers (USART2_RX)
+ *------------------------------------------------------*/
+
+#define DMA1_S5CR      (*(volatile uint32_t *)(DMA1_BASE + 0x88))
+#define DMA1_S5NDTR    (*(volatile uint32_t *)(DMA1_BASE + 0x8C))
+#define DMA1_S5PAR     (*(volatile uint32_t *)(DMA1_BASE + 0x90))
+#define DMA1_S5M0AR    (*(volatile uint32_t *)(DMA1_BASE + 0x94))
+#define DMA1_S5FCR     (*(volatile uint32_t *)(DMA1_BASE + 0x98))

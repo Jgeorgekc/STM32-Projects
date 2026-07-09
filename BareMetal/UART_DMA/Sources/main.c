@@ -87,6 +87,7 @@ int main(void)
     NVIC_ISER0 |= (1 << 17);
 
     UART_DMA_Init();
+    UART_DMA_RX_Init();   // RX DMA
     //ore_count = 0;
     while(1)
     {

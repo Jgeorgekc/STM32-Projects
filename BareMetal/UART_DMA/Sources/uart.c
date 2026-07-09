@@ -19,6 +19,9 @@ static volatile uint32_t uart_sr = 0;
 static volatile uint8_t tx_busy = 0;
 volatile uint8_t dma_busy = 0;
 
+#define DMA_RX_BUFFER_SIZE    64
+
+volatile uint8_t dma_rx_buffer[DMA_RX_BUFFER_SIZE];
 
 void delay(volatile uint32_t count)
 {
@@ -258,4 +261,90 @@ void DMA1_Stream6_IRQHandler(void)
 
         dma_busy = 0;
     }
+}
+
+void UART_DMA_RX_Init(void)
+{
+    /* Disable Stream5 */
+	/*-------------------------------------------------------
+	 * Disable Stream5 before configuration.
+	 * DMA registers can be modified only when EN = 0.
+	 *------------------------------------------------------*/
+	DMA1_S5CR &= ~(1 << 0);
+
+	/* Wait until hardware clears EN bit */
+	while (DMA1_S5CR & (1 << 0))
+	{
+	    /* Wait */
+	}
+
+
+    /* Wait until disabled */
+
+    /* Select Channel4 */
+	/*-------------------------------------------------------
+	 * USART2_RX uses DMA1 Stream5 Channel4
+	 *------------------------------------------------------*/
+	DMA1_S5CR &= ~(7 << 25);
+	DMA1_S5CR |=  (4 << 25);
+
+    /* Peripheral -> Memory */
+	/*-------------------------------------------------------
+	 * Peripheral -> Memory
+	 *------------------------------------------------------*/
+	DMA1_S5CR &= ~(3 << 6);
+
+    /* Memory Increment Enable */
+	/*-------------------------------------------------------
+	 * Enable Memory Increment
+	 *------------------------------------------------------*/
+	DMA1_S5CR |= (1 << 10);
+
+    /* Peripheral Increment Disable */
+	/*-------------------------------------------------------
+	 * Disable Peripheral Increment
+	 *------------------------------------------------------*/
+	DMA1_S5CR &= ~(1 << 9);
+
+    /* Normal Mode */
+	/*-------------------------------------------------------
+	 * Normal Mode
+	 *------------------------------------------------------*/
+	DMA1_S5CR &= ~(1 << 8);
+
+    /* Medium Priority */
+	/*-------------------------------------------------------
+	 * Medium Priority
+	 *------------------------------------------------------*/
+	DMA1_S5CR &= ~(3 << 16);
+	DMA1_S5CR |=  (1 << 16);
+
+    /* Peripheral Address */
+	/*-------------------------------------------------------
+	 * Source = USART2 Data Register
+	 *------------------------------------------------------*/
+	DMA1_S5PAR = (uint32_t)&USART2_DR;
+
+    /* Memory Address */
+	/*-------------------------------------------------------
+	 * Destination = RX DMA Buffer
+	 *------------------------------------------------------*/
+	DMA1_S5M0AR = (uint32_t)dma_rx_buffer;
+
+    /* Transfer Length */
+	/*-------------------------------------------------------
+	 * Receive 64 Bytes
+	 *------------------------------------------------------*/
+	DMA1_S5NDTR = DMA_RX_BUFFER_SIZE;
+
+    /* Enable USART RX DMA */
+	/*-------------------------------------------------------
+	 * Enable USART2 RX DMA Request
+	 *------------------------------------------------------*/
+	USART2_CR3 |= (1 << 6);
+    /* Enable Stream5 */
+	/*-------------------------------------------------------
+	 * Start DMA Reception
+	 *------------------------------------------------------*/
+	DMA1_S5CR |= (1 << 0);
 }
