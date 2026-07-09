@@ -1,85 +1,14 @@
 #include <stdint.h>
 #include <string.h>
+#include "stm32f407.h"
+#include "uart.h"
 
-/* RCC */
-#define RCC_AHB1ENR   (*(volatile uint32_t *)0x40023830)
-#define RCC_APB1ENR   (*(volatile uint32_t *)0x40023840)
-
-/* GPIOA */
-#define GPIOA_MODER   (*(volatile uint32_t *)0x40020000)
-#define GPIOA_PUPDR   (*(volatile uint32_t *)0x4002000C)
-#define GPIOA_AFRL    (*(volatile uint32_t *)0x40020020)
-
-/* GPIOD */
-#define GPIOD_MODER   (*(volatile uint32_t *)0x40020C00)
-#define GPIOD_ODR     (*(volatile uint32_t *)0x40020C14)
-
-/* USART2 */
-#define USART2_SR     (*(volatile uint32_t *)0x40004400)
-#define USART2_DR     (*(volatile uint32_t *)0x40004404)
-#define USART2_BRR    (*(volatile uint32_t *)0x40004408)
-#define USART2_CR1    (*(volatile uint32_t *)0x4000440C)
-
-#define RCC_APB1RSTR (*(volatile uint32_t *)0x40023820)
-
-
-#define USART2_CR2 (*(volatile uint32_t *)0x40004410)
-#define USART2_CR3 (*(volatile uint32_t *)0x40004414)
-
-#define NVIC_ISER1 (*(volatile uint32_t *)0xE000E104)
-
-#define RCC_APB2ENR      (*(volatile uint32_t *)0x40023844)
-
-#define SYSCFG_EXTICR1   (*(volatile uint32_t *)0x40013808)
-
-#define EXTI_IMR         (*(volatile uint32_t *)0x40013C00)
-#define EXTI_RTSR        (*(volatile uint32_t *)0x40013C08)
-#define EXTI_PR          (*(volatile uint32_t *)0x40013C14)
-
-#define NVIC_ISER0       (*(volatile uint32_t *)0xE000E100)
-
-#define TX_BUFFER_SIZE 128
-
-volatile char tx_buffer[TX_BUFFER_SIZE];
-
-volatile uint8_t tx_head = 0;
-volatile uint8_t tx_tail = 0;
-
-#define UART_BUFFER_SIZE 64
-
-#define CMD_BUFFER_SIZE 32
-
-char cmd_buffer[CMD_BUFFER_SIZE];
-
-uint8_t cmd_index = 0;
-
-
-volatile char uart_buffer[UART_BUFFER_SIZE];
-
-volatile uint8_t head = 0;
-volatile uint8_t tail = 0;
-
-void UART_SendChar(char ch);
-void UART_SendString(char *str);
-char UART_ReadChar(void);
-char UART_BufferRead(void);
-void UART_SendString_IT(char *str);
-void UART_SendChar_IT(char ch);
-
-void delay(volatile uint32_t count)
-{
-    while(count--);
-}
 
 volatile uint32_t cr2;
 volatile uint32_t cr3;
 volatile uint32_t apb1enr;
-
-volatile char rx;
-volatile int x = 0;
-volatile uint32_t uart_sr = 0;
-volatile uint8_t ore_count = 0;
-volatile uint8_t tx_busy = 0;
+char cmd_buffer[CMD_BUFFER_SIZE];
+uint8_t cmd_index = 0;
 
 int main(void)
 {
@@ -151,7 +80,7 @@ int main(void)
 
     while(1)
     {
-        if(head != tail)
+    	while(UART_Available())
         {
             char ch = UART_BufferRead();
 
@@ -212,7 +141,7 @@ int main(void)
 
 
                     /* ORE Count */
-                	if(ore_count == 0)
+                	if(UART_GetORECount() == 0)
                 	{
                 	    strcat(status_msg,"Overrun Error : NONE\r\n");
                 	}
@@ -253,118 +182,3 @@ int main(void)
     }
 }
 
-void UART_SendChar(char ch)
-{
-    while (!(USART2_SR & (1 << 7)));   // TXE
-
-    USART2_DR = ch;
-}
-
-char UART_ReadChar(void)
-{
-    while (!(USART2_SR & (1 << 5)));   // RXNE
-
-    return (char)(USART2_DR & 0xFF);
-}
-
-void UART_SendString(char *str)
-{
-    while (*str)
-    {
-        UART_SendChar(*str++);
-    }
-}
-void USART2_IRQHandler(void)
-{
-	volatile uint32_t rx_count = 0;
-
-    /* Capture status register */
-    uart_sr = USART2_SR;
-
-    /* Check Overrun Error */
-    if (uart_sr & (1 << 3))
-    {
-        ore_count++;
-
-        /* Clear ORE:
-         * Read SR first (already done),
-         * then read DR.
-         */
-        volatile uint32_t dummy = USART2_DR;
-        (void)dummy;
-
-        return;
-    }
-
-
-    if (USART2_SR & (1 << 5))
-    {
-    	uart_buffer[head]=USART2_DR;
-
-    	head=(head+1)%UART_BUFFER_SIZE;
-
-    	rx_count++;
-
-    }
-    /* TXE Interrupt */
-    if ((USART2_SR & (1 << 7)) && (USART2_CR1 & (1 << 7)))
-    {
-        USART2_DR = tx_buffer[tx_tail];
-
-        tx_tail = (tx_tail + 1) % TX_BUFFER_SIZE;
-
-        /* Buffer Empty? */
-        if (tx_head == tx_tail)
-        {
-            tx_busy = 0;
-            USART2_CR1 &= ~(1 << 7);
-        }
-    }
-}
-
-void EXTI0_IRQHandler(void)
-{
-    if (EXTI_PR & (1<<0))
-    {
-        EXTI_PR |= (1<<0);
-
-        UART_SendString_IT("Button Pressed\r\n");
-    }
-}
-char UART_BufferRead(void)
-{
-    char data;
-
-    /* Buffer empty? */
-    while (head == tail);
-
-    data = uart_buffer[tail];
-
-    tail = (tail + 1) % UART_BUFFER_SIZE;
-
-    return data;
-}
-void UART_SendString_IT(char *str)
-{
-    while(*str)
-    {
-        UART_SendChar_IT(*str++);
-    }
-}
-void UART_SendChar_IT(char ch)
-{
-    uint8_t next = (tx_head + 1) % TX_BUFFER_SIZE;
-
-    /* Wait if buffer is full */
-    while(next == tx_tail);
-
-    tx_buffer[tx_head] = ch;
-    tx_head = next;
-
-    /* Start transmission if idle */
-    if(tx_busy == 0)
-    {
-        tx_busy = 1;
-        USART2_CR1 |= (1 << 7);      // Enable TXE interrupt
-    }
-}

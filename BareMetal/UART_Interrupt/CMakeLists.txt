@@ -50,6 +50,7 @@ set (PROJECT_SOURCES
 	# LIST SOURCE FILES HERE
 	Startup/startup_stm32f407vgtx.s
 	Sources/main.c
+	Sources/uart.c
 	Sources/syscalls.c
 	Sources/sysmem.c
 
@@ -63,6 +64,7 @@ set (PROJECT_DEFINES
 
 set (PROJECT_INCLUDES
 	# LIST INCLUDE DIRECTORIES HERE
+	Sources
 
     )
 
