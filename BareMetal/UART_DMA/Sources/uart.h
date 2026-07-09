@@ -9,6 +9,7 @@
 #define UART_H
 
 #include <stdint.h>
+#include <string.h>
 
 #define TX_BUFFER_SIZE 128
 
@@ -35,5 +36,7 @@ uint8_t UART_Available(void);
 char UART_Read(void);
 
 uint8_t UART_GetORECount(void);
+
+void UART_SendString_DMA(char *str);
 
 #endif

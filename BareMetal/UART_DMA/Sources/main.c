@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <string.h>
 #include "stm32f407.h"
 #include "uart.h"
 
@@ -9,6 +8,8 @@ volatile uint32_t cr3;
 volatile uint32_t apb1enr;
 char cmd_buffer[CMD_BUFFER_SIZE];
 uint8_t cmd_index = 0;
+char msg[] = "Hello DMA\r\n";
+uint8_t dma_sent = 0;
 
 int main(void)
 {
@@ -78,10 +79,18 @@ int main(void)
     NVIC_ISER0 |= (1<<6);
 
 
+
     while(1)
     {
+        if(dma_sent == 0)
+        {
+            UART_SendString_DMA(msg);
+            dma_sent = 1;
+        }
     	while(UART_Available())
         {
+
+
             char ch = UART_BufferRead();
 
             //UART_SendChar(ch);      // Echo
