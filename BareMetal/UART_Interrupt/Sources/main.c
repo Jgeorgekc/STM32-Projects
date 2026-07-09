@@ -38,6 +38,13 @@
 
 #define NVIC_ISER0       (*(volatile uint32_t *)0xE000E100)
 
+#define TX_BUFFER_SIZE 128
+
+volatile char tx_buffer[TX_BUFFER_SIZE];
+
+volatile uint8_t tx_head = 0;
+volatile uint8_t tx_tail = 0;
+
 #define UART_BUFFER_SIZE 64
 
 #define CMD_BUFFER_SIZE 32
@@ -56,6 +63,8 @@ void UART_SendChar(char ch);
 void UART_SendString(char *str);
 char UART_ReadChar(void);
 char UART_BufferRead(void);
+void UART_SendString_IT(char *str);
+void UART_SendChar_IT(char ch);
 
 void delay(volatile uint32_t count)
 {
@@ -70,6 +79,7 @@ volatile char rx;
 volatile int x = 0;
 volatile uint32_t uart_sr = 0;
 volatile uint8_t ore_count = 0;
+volatile uint8_t tx_busy = 0;
 
 int main(void)
 {
@@ -145,7 +155,7 @@ int main(void)
         {
             char ch = UART_BufferRead();
 
-            UART_SendChar(ch);      // Echo
+            //UART_SendChar(ch);      // Echo
 
             if(ch != '\r' && ch != '\n')
             {
@@ -164,42 +174,77 @@ int main(void)
                 {
                     GPIOD_ODR |= (1 << 12);
 
-                    UART_SendString("\r\nLED ON\r\n");
+                    //UART_SendString("\r\nLED ON\r\n");
+                    UART_SendString_IT("LED ON\r\n");
+                    //UART_SendString_IT("123456789\r\n");
+
                 }else if(strcmp(cmd_buffer,"led off") == 0)
                 {
                     GPIOD_ODR &= ~(1 << 12);
 
-                    UART_SendString("\r\nLED OFF\r\n");
+                    UART_SendString_IT("\r\nLED OFF\r\n");
                 }/* STATUS */
                 else if(strcmp(cmd_buffer, "status") == 0)
                 {
-                    UART_SendString("\r\n===== SYSTEM STATUS =====\r\n");
+                	char status_msg[256];
 
-                    if(GPIOD_ODR & (1 << 12))
-                        UART_SendString("LED : ON\r\n");
-                    else
-                        UART_SendString("LED : OFF\r\n");
+                	if (GPIOD_ODR & (1 << 12))
+                	{
+                	    strcpy(status_msg,
+                	        "\r\n========== SYSTEM STATUS ==========\r\n"
+                	        "LED           : ON\r\n"
+                	        "UART          : OK\r\n"
+                	        "RX Buffer     : OK\r\n"
+                	        "TX Buffer     : OK\r\n"
+                	        );
+                	}
+                	else
+                	{
+                	    strcpy(status_msg,
+                	        "\r\n========== SYSTEM STATUS ==========\r\n"
+                	        "LED           : OFF\r\n"
+                	        "UART          : OK\r\n"
+                	        "RX Buffer     : OK\r\n"
+                	        "TX Buffer     : OK\r\n"
+                	        );
+                	}
 
-                    UART_SendString("UART : OK\r\n");
-                    UART_SendString("=========================\r\n");
+
+
+                    /* ORE Count */
+                	if(ore_count == 0)
+                	{
+                	    strcat(status_msg,"Overrun Error : NONE\r\n");
+                	}
+                	else
+                	{
+                	    strcat(status_msg,"Overrun Error : DETECTED\r\n");
+                	}
+
+                	strcat(status_msg,
+                	       "===================================\r\n");
+
+                    UART_SendString_IT(status_msg);
+                    //UART_SendString_IT(
+                    //    "===================================\r\n");
                 }
 
                 /* HELP */
                 else if(strcmp(cmd_buffer, "help") == 0)
                 {
-                    UART_SendString("\r\nAvailable Commands\r\n");
-                    UART_SendString("------------------\r\n");
-                    UART_SendString("help\r\n");
-                    UART_SendString("led on\r\n");
-                    UART_SendString("led off\r\n");
-                    UART_SendString("status\r\n");
+                	UART_SendString_IT("\r\nAvailable Commands\r\n");
+                	UART_SendString_IT("------------------\r\n");
+                	UART_SendString_IT("help\r\n");
+                	UART_SendString_IT("led on\r\n");
+                	UART_SendString_IT("led off\r\n");
+                	UART_SendString_IT("status\r\n");
                 }
 
                 /* Unknown command */
                 else
                 {
-                    UART_SendString("\r\nUnknown Command\r\n");
-                    UART_SendString("Type 'help'\r\n");
+                	UART_SendString_IT("\r\nUnknown Command\r\n");
+                	UART_SendString_IT("Type 'help'\r\n");
                 }
 
                 cmd_index = 0;
@@ -261,6 +306,20 @@ void USART2_IRQHandler(void)
     	rx_count++;
 
     }
+    /* TXE Interrupt */
+    if ((USART2_SR & (1 << 7)) && (USART2_CR1 & (1 << 7)))
+    {
+        USART2_DR = tx_buffer[tx_tail];
+
+        tx_tail = (tx_tail + 1) % TX_BUFFER_SIZE;
+
+        /* Buffer Empty? */
+        if (tx_head == tx_tail)
+        {
+            tx_busy = 0;
+            USART2_CR1 &= ~(1 << 7);
+        }
+    }
 }
 
 void EXTI0_IRQHandler(void)
@@ -269,7 +328,7 @@ void EXTI0_IRQHandler(void)
     {
         EXTI_PR |= (1<<0);
 
-        UART_SendString("Button Pressed\r\n");
+        UART_SendString_IT("Button Pressed\r\n");
     }
 }
 char UART_BufferRead(void)
@@ -284,4 +343,28 @@ char UART_BufferRead(void)
     tail = (tail + 1) % UART_BUFFER_SIZE;
 
     return data;
+}
+void UART_SendString_IT(char *str)
+{
+    while(*str)
+    {
+        UART_SendChar_IT(*str++);
+    }
+}
+void UART_SendChar_IT(char ch)
+{
+    uint8_t next = (tx_head + 1) % TX_BUFFER_SIZE;
+
+    /* Wait if buffer is full */
+    while(next == tx_tail);
+
+    tx_buffer[tx_head] = ch;
+    tx_head = next;
+
+    /* Start transmission if idle */
+    if(tx_busy == 0)
+    {
+        tx_busy = 1;
+        USART2_CR1 |= (1 << 7);      // Enable TXE interrupt
+    }
 }
