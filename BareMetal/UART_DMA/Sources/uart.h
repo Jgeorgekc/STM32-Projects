@@ -1,48 +1,50 @@
-/*
- * uart.h
- *
- *  Created on: 09-Jul-2026
- *      Author: lenovo
- */
-
 #ifndef UART_H
 #define UART_H
 
 #include <stdint.h>
-#include <string.h>
 
-#define TX_BUFFER_SIZE 128
+/*=========================================================
+ * Buffer Sizes
+ *========================================================*/
+#define TX_BUFFER_SIZE        128
+#define UART_BUFFER_SIZE       64
+#define DMA_RX_BUFFER_SIZE     64
+#define CMD_BUFFER_SIZE        32
 
-#define UART_BUFFER_SIZE 64
-
-#define CMD_BUFFER_SIZE 32
-
+/*=========================================================
+ * UART Initialization
+ *========================================================*/
 void UART_Init(void);
 
+/*=========================================================
+ * UART Polling APIs
+ *========================================================*/
 void UART_SendChar(char ch);
-
 void UART_SendString(char *str);
+char UART_ReadChar(void);
 
+/*=========================================================
+ * UART Interrupt APIs
+ *========================================================*/
 void UART_SendChar_IT(char ch);
-
 void UART_SendString_IT(char *str);
 
-char UART_BufferRead(void);
-
-void USART2_IRQHandler(void);
-
-uint8_t UART_Available(void);
-
-char UART_Read(void);
-
-uint8_t UART_GetORECount(void);
-
+/*=========================================================
+ * UART DMA APIs
+ *========================================================*/
 void UART_DMA_Init(void);
-
+void UART_DMA_RX_Init(void);
 void UART_SendString_DMA(char *str);
 
-uint8_t UART_DMA_IsBusy(void);
+/*=========================================================
+ * UART Receive APIs
+ *========================================================*/
+uint8_t UART_Available(void);
+char UART_BufferRead(void);
 
-void UART_DMA_RX_Init(void);
+/*=========================================================
+ * UART Status APIs
+ *========================================================*/
+uint8_t UART_GetORECount(void);
 
-#endif
+#endif /* UART_H */

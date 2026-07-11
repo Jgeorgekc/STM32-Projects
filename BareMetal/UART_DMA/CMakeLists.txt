@@ -53,6 +53,7 @@ set (PROJECT_SOURCES
 	Sources/uart.c
 	Sources/syscalls.c
 	Sources/sysmem.c
+	Sources/cli.c
 
 
 	)
