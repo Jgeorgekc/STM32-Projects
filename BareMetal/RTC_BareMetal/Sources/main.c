@@ -9,6 +9,46 @@
 #include "uart.h"
 
 volatile uint32_t iser1;
+volatile uint32_t systick_counter = 0;
+volatile uint8_t  led_on_flag = 0;
+volatile uint32_t led_on_timestamp = 0;
+volatile uint32_t print_timestamp = 0;   // global, mukalil declare cheyyu
+/* ---------- SysTick ---------- */
+void SysTick_Init(void)
+{
+    SysTick->LOAD = (16000000 / 1000) - 1;   // 16MHz HSI, 1ms tick
+    SysTick->VAL  = 0;
+    SysTick->CTRL = SysTick_CTRL_ENABLE | SysTick_CTRL_TICKINT | SysTick_CTRL_CLKSOURCE;
+}
+
+void SysTick_Handler(void)
+{
+    systick_counter++;
+}
+
+/* ---------- LED (PD12) ---------- */
+void LED_Init(void)
+{
+    RCC_AHB1ENR |= (1 << 3);           // GPIOD clock enable
+    GPIOD_MODER &= ~(0x3 << (12 * 2));
+    GPIOD_MODER |=  (0x1 << (12 * 2)); // PD12 output mode
+}
+
+/* ---------- Button (PA0) EXTI ---------- */
+void Button_EXTI_Init(void)
+{
+    RCC_AHB1ENR |= (1 << 0);            // GPIOA clock enable
+    GPIOA_MODER &= ~(0x3 << (0 * 2));   // PA0 input mode
+
+    RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+
+    SYSCFG_EXTICR1 &= ~(0xF << 0);      // PA0 -> EXTI0 (bits 3:0 = 0000)
+
+    EXTI_RTSR |= (1 << 0);              // rising edge trigger
+    EXTI_IMR  |= (1 << 0);              // unmask line 0
+
+    NVIC_ISER0 |= (1 << EXTI0_IRQn);
+}
 
 void RTC_SendTime(uint8_t hh, uint8_t mm, uint8_t ss)
 {
@@ -33,6 +73,76 @@ void simple_delay(volatile uint32_t count)
 {
     for (volatile uint32_t i = 0; i < count; i++);
 }
+void RTC_SetAlarm_1MinuteFromNow(void)
+{
+    uint32_t tr = RTC->TR;
+
+    uint8_t min = ((tr >> 12) & 0x7) * 10 + ((tr >> 8) & 0xF);
+    uint8_t hr  = ((tr >> 20) & 0x3) * 10 + ((tr >> 16) & 0xF);
+
+    min = min + 1;
+    if (min >= 60) {
+        min = 0;
+        hr = (hr + 1) % 24;
+    }
+
+    uint8_t min_bcd = ((min / 10) << 4) | (min % 10);
+    uint8_t hr_bcd  = ((hr / 10) << 4) | (hr % 10);
+
+    RTC->WPR = 0xCA;
+    RTC->WPR = 0x53;
+
+    RTC->CR &= ~RTC_CR_ALRAE;
+    while (!(RTC->ISR & RTC_ISR_ALRAWF));
+
+    RTC->ALRMAR = (1U << 31)
+                | (hr_bcd  << 16)
+                | (min_bcd << 8)
+                | (1U << 7);
+
+    RTC->CR |= RTC_CR_ALRAE;
+    RTC->CR |= RTC_CR_ALRAIE;
+
+    RTC->WPR = 0xFF;
+
+    EXTI_IMR  |= (1 << 17);   // RTC alarm internal EXTI line 17
+    EXTI_RTSR |= (1 << 17);
+    NVIC_ISER1 |= (1 << (RTC_Alarm_IRQn - 32));
+}
+
+void EXTI0_IRQHandler(void)
+{
+    if (EXTI_PR & (1 << 0)) {
+        EXTI_PR |= (1 << 0);        // clear
+        RTC_SetAlarm_1MinuteFromNow();
+        UART_SendString_DMA("Button pressed - Alarm set for 1 min\r\n");
+    }
+}
+
+void RTC_Alarm_IRQHandler(void)
+{
+    if (RTC->ISR & RTC_ISR_ALRAF) {
+        RTC->ISR &= ~RTC_ISR_ALRAF;   // alarm flag clear
+        EXTI_PR |= (1 << 17);         // EXTI pending clear
+
+        /* --- Alarm-ne immediately disable cheyyuka (one-shot) --- */
+        RTC->WPR = 0xCA;
+        RTC->WPR = 0x53;
+
+        RTC->CR &= ~RTC_CR_ALRAE;     // Alarm A disable
+        RTC->CR &= ~RTC_CR_ALRAIE;    // Alarm A interrupt disable
+
+        RTC->WPR = 0xFF;
+
+        /* --- LED ON --- */
+        GPIOD_ODR |= (1 << 12);
+        led_on_flag = 1;
+        led_on_timestamp = systick_counter;
+
+        UART_SendString_DMA("Alarm fired - LED ON\r\n");
+    }
+}
+
 int main(void)
 {
     /*-------------------------------------------------------
@@ -108,12 +218,21 @@ int main(void)
 
     iser1 = NVIC_ISER1;
 
+    SysTick_Init();
+       LED_Init();
+       Button_EXTI_Init();
+
+
     /*-------------------------------------------------------
      * Main Loop
      *------------------------------------------------------*/
     while(1)
     {
         /* Background Tasks */
+
+        /* Time print — oru second-il oru thavana mathram */
+        if (systick_counter - print_timestamp >= 1000) {
+            print_timestamp = systick_counter;
 
     		uint32_t tr = RTC->TR;
     	    uint32_t dr = RTC->DR;   // TR ke baad hi DR read karna
@@ -124,7 +243,13 @@ int main(void)
     	    uint8_t ss = ((tr >> 4) & 0x7) * 10 + (tr & 0xF);
 
     	    RTC_SendTime(hh, mm, ss);
-    	    simple_delay(2000000);
+    	    if (led_on_flag && (systick_counter - led_on_timestamp >= 5000)) {
+    	           GPIOD_ODR &= ~(1 << 12);
+    	           led_on_flag = 0;
+    	           UART_SendString_DMA("LED OFF\r\n");
+    	       }
+        }
+
 
 
         /* CPU can sleep here */

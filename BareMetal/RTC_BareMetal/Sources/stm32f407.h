@@ -37,6 +37,25 @@
 #define RCC_CSR_LSION       (1U << 0)
 #define RCC_CSR_LSIRDY      (1U << 1)
 
+/*=========================================================
+ * RCC APB2ENR - SYSCFG enable
+ *========================================================*/
+#define RCC_APB2ENR_SYSCFGEN  (1U << 14)
+
+/*=========================================================
+ * RTC Alarm A bits
+ *========================================================*/
+#define RTC_CR_ALRAE     (1U << 8)
+#define RTC_CR_ALRAIE    (1U << 12)
+#define RTC_ISR_ALRAWF   (1U << 0)
+#define RTC_ISR_ALRAF    (1U << 8)
+
+/*=========================================================
+ * IRQ Numbers (for NVIC)
+ *========================================================*/
+#define EXTI0_IRQn       6
+#define RTC_Alarm_IRQn   41
+
 /* ---------------- PWR (struct style) ---------------- */
 typedef struct {
     volatile uint32_t CR;
@@ -173,5 +192,19 @@ typedef struct {
  *========================================================*/
 #define NVIC_ISER0      (*(volatile uint32_t *)(NVIC_ISER0_BASE))
 #define NVIC_ISER1      (*(volatile uint32_t *)(NVIC_ISER1_BASE))
+
+typedef struct {
+    volatile uint32_t CTRL;
+    volatile uint32_t LOAD;
+    volatile uint32_t VAL;
+    volatile uint32_t CALIB;
+} SysTick_TypeDef;
+
+#define SysTick_BASE  0xE000E010UL
+#define SysTick       ((SysTick_TypeDef *)SysTick_BASE)
+
+#define SysTick_CTRL_ENABLE    (1U << 0)
+#define SysTick_CTRL_TICKINT   (1U << 1)
+#define SysTick_CTRL_CLKSOURCE (1U << 2)
 
 #endif /* STM32F407_H */
